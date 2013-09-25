@@ -18,9 +18,6 @@
 # You should have received a copy of the GNU General Public License along with
 # this program. If not, see <http://www.gnu.org/licenses/>.
 #
-# The LaTeX equation portions of this file were initially based on
-# latexmath2png, by Kamil Kisiel (kamil@kamikisiel.net).
-#
 
 import sys
 import os
@@ -34,53 +31,18 @@ def info():
   print __doc__
   print 'Platform: ' + sys.platform + '.'
   print 'Python: %s, located at %s.' % (sys.version[:5], sys.executable)
-  print 'Equation support:',
-  (supported, message) = testeqsupport()
-  if supported:
-    print 'yes.'
-  else:
-    print 'no.'
-  print message
-
-def testeqsupport():
-  supported = True
-  msg = ''
-  p = Popen('latex --version', shell=True, stdout=PIPE, stderr=PIPE)
-  rc = p.wait()
-  if rc != 0:
-    msg += '  latex: not found.\n'
-    supported = False
-  else:
-    msg += '  latex: ' + p.stdout.readlines()[0].rstrip() + '.\n'
-  p = Popen('dvipng --version', shell=True, stdout=PIPE, stderr=PIPE)
-  rc = p.wait()
-  if rc != 0:
-    msg += '  dvipng: not found.\n'
-    supported = False
-  else:
-    msg += '  dvipng: ' + p.stdout.readlines()[0].rstrip() + '.\n'
-
-  return (supported, msg[:-1])
+  print 'Equations supported with MathJax'
 
 class controlstruct(object):
-  def __init__(self, infile, outfile=None, conf=None, inname=None, eqs=True,
-         eqdir='eqs', eqdpi=130):
+  def __init__(self, infile, outfile=None, conf=None, inname=None):
     self.inname = inname
     self.inf = infile
     self.outf = outfile
     self.conf = conf
     self.linenum = 0
     self.otherfiles = []
-    self.eqs = eqs
-    self.eqdir = eqdir
-    self.eqdpi = eqdpi
-    # Default to supporting equations until we know otherwise.
-    self.eqsupport = True
-    self.eqcache = True
-    self.eqpackages = []
     self.texlines = []
     self.analytics = None
-    self.eqbd = {} # equation base depth.
     self.baseline = None
 
   def pushfile(self, newfile):
@@ -92,7 +54,7 @@ class controlstruct(object):
     self.inf = self.otherfiles.pop(0)
 
 def showhelp():
-  a = """Usage: jemdoc [OPTIONS] [SOURCEFILE] 
+  a = """Usage: jemdoc [OPTIONS] [SOURCEFILE]
   Produces html markup from a jemdoc SOURCEFILE.
 
   Most of the time you can use jemdoc without any additional flags.
@@ -113,7 +75,7 @@ def showhelp():
   overwritten by including them in a configuration file, and running,
   for example,
 
-    jemdoc -c mywebsite.conf index.jemdoc 
+    jemdoc -c mywebsite.conf index.jemdoc
 
   You can view version and installation details with
 
@@ -137,10 +99,10 @@ def standardconf():
   <head>
   <meta name="generator" content="jemdoc, see http://jemdoc.jaboc.net/" />
   <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
-  
+
   [defaultcss]
   <link rel="stylesheet" href="jemdoc.css" type="text/css" />
-  
+
   [windowtitle]
   # used in header for window title.
   <title>|</title>
@@ -150,22 +112,22 @@ def standardconf():
 
   [fwtitleend]
   </div>
-  
+
   [doctitle]
   # used at top of document.
   <div id="toptitle">
   <h1>|</h1>
-  
+
   [subtitle]
   <div id="subtitle">|</div>
-  
+
   [doctitleend]
   </div>
-  
+
   [bodystart]
   </head>
   <body>
-  
+
   [analytics]
   <script type="text/javascript">
   var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
@@ -176,16 +138,30 @@ def standardconf():
       var pageTracker = _gat._getTracker("|");
       pageTracker._trackPageview();
   } catch(err) {}</script>
-  
+
+  [mathjaxCDN]
+  <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
+
+  [mathjax]
+  <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ['$','$']],
+            displayMath:  [  ["$$", "$$"] ],
+            processEscapes: true
+        }
+    });
+  </script>
+
   [menustart]
   <table summary="Table for page layout." id="tlayout">
   <tr valign="top">
   <td id="layout-menu">
-  
+
   [menuend]
   </td>
   <td id="layout-content">
-  
+
   [menucategory]
   <div class="menu-category">|</div>
 
@@ -196,63 +172,63 @@ def standardconf():
   <link rel="stylesheet" href="|" type="text/css" />
 
   [specificjs]
-  <script src="|.js" type="text/javascript"></script>
-  
+  <script src="|" type="text/javascript"></script>
+
   [currentmenuitem]
   <div class="menu-item"><a href="|1" class="current">|2</a></div>
-  
+
   [nomenu]
   <div id="layout-content">
-  
+
   [menulastbit]
   </td>
   </tr>
   </table>
-  
+
   [nomenulastbit]
   </div>
-  
+
   [bodyend]
   </body>
   </html>
-  
+
   [infoblock]
   <div class="infoblock">
-  
+
   [codeblock]
   <div class="codeblock">
-  
+
   [blocktitle]
   <div class="blocktitle">|</div>
-  
+
   [infoblockcontent]
   <div class="blockcontent">
-  
+
   [codeblockcontent]
   <div class="blockcontent"><pre>
-  
+
   [codeblockend]
   </pre></div></div>
-  
+
   [codeblockcontenttt]
   <div class="blockcontent"><tt class="tthl">
-  
+
   [codeblockendtt]
   </tt></div></div>
-  
+
   [infoblockend]
   </div></div>
-  
+
   [footerstart]
   <div id="footer">
   <div id="footer-text">
-  
+
   [footerend]
   </div>
   </div>
-  
+
   [lastupdated]
-  Page generated |, by <a href="http://jemdoc.jaboc.net/">jemdoc</a>.
+  Page generated |
 
   [sourcelink]
   (<a href="|">source</a>)
@@ -268,9 +244,6 @@ def standardconf():
   return b
 
 class JandalError(Exception):
-  pass
-
-class NoEqSupport(Exception):
   pass
 
 def raisejandal(msg, line=0):
@@ -506,69 +479,6 @@ def replacepercents(b):
 
   return b
 
-def replaceequations(b, f):
-  # replace $sections$ and \(sections\) as equations.
-  rs = ((re.compile(r'(?<!\\)\$(.*?)(?<!\\)\$', re.M + re.S), False),
-     (re.compile(r'(?<!\\)\\\((.*?)(?<!\\)\\\)', re.M + re.S), True))
-  for (r, wl) in rs:
-    m = r.search(b)
-    while m:
-      eq = m.group(1)
-      if wl:
-        fn = str(abs(hash(eq + 'wl120930alsdk')))
-      else:
-        fn = str(abs(hash(eq)))
-
-      # Find out the baseline when we first encounter an equation (don't
-      # bother, otherwise).
-      # Other initialization stuff which we do only once we know we have
-      # equations.
-      if f.baseline is None:
-        # See if the eqdir exists, and if not, create it.
-        if not os.path.isdir(f.eqdir):
-          os.mkdir(f.eqdir)
-
-        # Check that the tools we need exist.
-        (supported, message) = testeqsupport()
-        if not supported:
-          print 'WARNING: equation support disabled.'
-          print message
-          f.eqsupport = False
-          return b
-
-        # Calculate the baseline.
-        eqt = "0123456789xxxXXxX"
-        (f.baseline, blfn) = geneq(f, eqt, dpi=f.eqdpi, wl=False,
-                       outname='baseline-' + str(f.eqdpi))
-        if os.path.exists(blfn):
-          os.remove(blfn)
-
-      fn = fn + '-' + str(f.eqdpi)
-      (depth, fullfn) = geneq(f, eq, dpi=f.eqdpi, wl=wl, outname=fn)
-      fullfn = fullfn.replace('\\', '/')
-
-      offset = depth - f.baseline + 1
-
-      eqtext = allreplace(eq)
-      eqtext = eqtext.replace('\\', '')
-      eqtext = eqtext.replace('\n', ' ')
-
-      # Double braces will cause problems with escaping of image tag.
-      eqtext = eqtext.replace('{{', 'DOUBLEOPENBRACE')
-      eqtext = eqtext.replace('}}', 'DOUBLECLOSEBRACE')
-
-      if wl:
-        b = b[:m.start()] + \
-            '{{\n<div class="eqwl"><img class="eqwl" src="%s" alt="%s" />\n<br /></div>}}' % (fullfn, eqtext) + b[m.end():]
-      else:
-        b = b[:m.start()] + \
-          '{{<img class="eq" src="%s" alt="%s" style="vertical-align: -%dpx" />}}' % (fullfn, eqtext, offset) + b[m.end():]
-
-      # jem: also clean out line breaks in the alttext?
-      m = r.search(b, m.start())
-
-  return replacequoted(b)
-
 def replaceimages(b):
   # works with [img{width}{height}{alttext} location caption].
   r = re.compile(r'(?<!\\)\[img((?:\{.*?\}){,3})\s(.*?)(?:\s(.*?))?(?<!\\)\]',
@@ -651,10 +561,6 @@ def br(b, f, tableblock=False):
       b = re.sub("!\$%s\$!" % m, 'FAILED_MATCH_' + m, b)
     else:
       b = re.sub("!\$%s\$!" % m, repl, b)
-
-  # Deal with literal backspaces.
-  if f.eqs and f.eqsupport:
-    b = replaceequations(b, f)
 
   b = re.sub(r'\\\\', 'jemLITerl33talBS', b)
 
@@ -823,7 +729,7 @@ def gethl(lang):
     d['commentuntilend'] = '#'
     d['strings'] = True
   elif lang in ['perl']:
-    d['statement'] = ['if', 'unless', 'while', 'until', 'for', 
+    d['statement'] = ['if', 'unless', 'while', 'until', 'for',
             'foreach', 'when', 'elsif', 'else']
     d['builtin'] = ['my','our','local','state',
             'return','last','next','redo','goto','break',
@@ -940,89 +846,6 @@ def language(f, l, hl):
       return
 
   out(f, l + '\n')
-
-def geneq(f, eq, dpi, wl, outname):
-  # First check if there is an existing file.
-  eqname = os.path.join(f.eqdir, outname + '.png')
-
-  eqdepths = {}
-  if f.eqcache:
-    try:
-      dc = open(os.path.join(f.eqdir, '.eqdepthcache'), 'rb')
-      for l in dc:
-        a = l.split()
-        eqdepths[a[0]] = int(a[1])
-      dc.close()
-
-      if os.path.exists(eqname) and eqname in eqdepths:
-        return (eqdepths[eqname], eqname)
-    except IOError:
-      print 'eqdepthcache read failed.'
-
-  # Open tex file.
-  tempdir = tempfile.gettempdir()
-  fd, texfile = tempfile.mkstemp('.tex', '', tempdir, True)
-  basefile = texfile[:-4]
-  g = os.fdopen(fd, 'wb')
-
-  preamble = '\documentclass{article}\n'
-  for p in f.eqpackages:
-    preamble += '\usepackage{%s}\n' % p
-  for p in f.texlines:
-    # Replace \{ and \} in p with { and }.
-    # XXX hack.
-    preamble += re.sub(r'\\(?=[{}])', '', p + '\n')
-  preamble += '\pagestyle{empty}\n\\begin{document}\n'
-  g.write(preamble)
-  
-  # Write the equation itself.
-  if wl:
-    g.write('\\[%s\\]' % eq)
-  else:
-    g.write('$%s$' % eq)
-
-  # Finish off the tex file.
-  g.write('\n\\newpage\n\end{document}')
-  g.close()
-
-  exts = ['.tex', '.aux', '.dvi', '.log']
-  try:
-    # Generate the DVI file
-    latexcmd = 'latex -file-line-error-style -interaction=nonstopmode ' + \
-         '-output-directory %s %s' % (tempdir, texfile)
-    p = Popen(latexcmd, shell=True, stdout=PIPE)
-    rc = p.wait()
-    if rc != 0:
-      for l in p.stdout.readlines():
-        print '  ' + l.rstrip()
-      exts.remove('.tex')
-      raise Exception('latex error')
-
-    dvifile = basefile + '.dvi'
-    dvicmd = 'dvipng --freetype0 -Q 9 -z 3 --depth -q -T tight -D %i -bg Transparent -o %s %s' % (dpi, eqname, dvifile)
-    # discard warnings, as well.
-    p = Popen(dvicmd, shell=True, stdout=PIPE, stderr=PIPE)
-    rc = p.wait()
-    if rc != 0:
-      print p.stderr.readlines()
-      raise Exception('dvipng error')
-    depth = int(p.stdout.readlines()[-1].split('=')[-1])
-  finally:
-    # Clean up.
-    for ext in exts:
-      g = basefile + ext
-      if os.path.exists(g):
-        os.remove(g)
-
-  # Update the cache if we're using it.
-  if f.eqcache and eqname not in eqdepths:
-    try:
-      dc = open(os.path.join(f.eqdir, '.eqdepthcache'), 'ab')
-      dc.write(eqname + ' ' + str(depth) + '\n')
-      dc.close()
-    except IOError:
-      print 'eqdepthcache update failed.'
-  return (depth, eqname)
 
 def dashlist(f, ordered=False):
   level = 0
@@ -1196,6 +1019,7 @@ def procfile(f):
   showlastupdated = True
   showlastupdatedtime = True
   nodefaultcss = False
+  usemathjax = False
   fwtitle = False
   css = []
   js = []
@@ -1249,10 +1073,6 @@ def procfile(f):
           r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
           js += re.findall(r, b)
 
-        elif b.startswith('addpackage'):
-          r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
-          f.eqpackages += re.findall(r, b)
-
         elif b.startswith('addtex'):
           r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
           f.texlines += re.findall(r, b)
@@ -1260,6 +1080,9 @@ def procfile(f):
         elif b.startswith('analytics'):
           r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
           f.analytics = re.findall(r, b)[0]
+
+        elif b.startswith('mathjax'):
+          usemathjax = True
 
         elif b.startswith('title'):
           r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
@@ -1269,33 +1092,14 @@ def procfile(f):
 
           title = g[0]
 
-        elif b.startswith('noeqs'):
-          f.eqs = False
-
-        elif b.startswith('noeqcache'):
-          f.eqcache = False
-
-        elif b.startswith('eqsize'):
-          r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
-          g = re.findall(r, b)
-          if len(g) != 1:
-            raise SyntaxError('eqsize error on line %d' % f.linenum)
-
-          f.eqdpi = int(g[0])
-
-        elif b.startswith('eqdir'):
-          r = re.compile(r'(?<!\\){(.*?)(?<!\\)}', re.M + re.S)
-          g = re.findall(r, b)
-          if len(g) != 1:
-            raise SyntaxError('eqdir error on line %d' % f.linenum)
-
-          f.eqdir = g[0]
-
   # Get the file started with the firstbit.
   out(f.outf, f.conf['firstbit'])
 
   if not nodefaultcss:
     out(f.outf, f.conf['defaultcss'])
+
+  if usemathjax:
+    out(f.outf, f.conf['mathjaxCDN'])
 
   # Add per-file css lines here.
   for i in range(len(css)):
@@ -1321,6 +1125,8 @@ def procfile(f):
 
   out(f.outf, f.conf['bodystart'])
 
+  if usemathjax:
+    out(f.outf, f.conf['mathjax'])
 
   if f.analytics:
     hb(f.outf, f.conf['analytics'], f.analytics)
@@ -1348,24 +1154,6 @@ def procfile(f):
 
     if p == '':
       break
-
-    elif p == '\\(':
-      if not (f.eqs and f.eqsupport):
-        break
-
-      s = nl(f)
-      # Quickly pull out the equation here:
-      # Check we don't already have the terminating character in a whole-line
-      # equation without linebreaks, eg \( Ax=b \):
-      if not s.strip().endswith('\)'):
-        while True:
-          l = nl(f, codemode=True)
-          if not l:
-            break
-          s += l
-          if l.strip() == '\)':
-            break
-      out(f.outf, br(s.strip(), f))
 
     # look for lists.
     elif p == '-':
@@ -1424,7 +1212,7 @@ def procfile(f):
         if len(g) in (0, 1): # info block.
           out(f.outf, f.conf['infoblock'])
           infoblock = True
-          
+
           if len(g) == 1: # info block.
             hb(f.outf, f.conf['blocktitle'], g[0])
 
@@ -1451,7 +1239,7 @@ def procfile(f):
           # handles
           # {}{img_left}{source}{alttext}{width}{height}{linktarget}.
           g += ['']*(7 - len(g))
-          
+
           if g[4].isdigit():
             g[4] += 'px'
 
